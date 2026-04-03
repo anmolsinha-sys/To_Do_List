@@ -111,14 +111,12 @@ export default function App() {
 
   // --- Helpers ---
 
-  const playCompleteSound = () => {
-    if (isMuted || !synth.current) return;
-    try {
-      synth.current.triggerAttackRelease("C5", "8n");
-      setTimeout(() => synth.current?.triggerAttackRelease("G5", "8n"), 100);
-    } catch (e) {
-      console.error("Audio failed", e);
-    }
+  const strikePlayer = new Tone.Player("/fahhhhh.mp3").toDestination();
+
+  const playStrike = () => {
+    if (isMuted) return;
+    if (Tone.context.state !== "running") Tone.start();
+    strikePlayer.start();
   };
 
   const playFanfare = () => {
@@ -195,7 +193,7 @@ export default function App() {
     setTodos(prev => prev.map(todo => {
       if (todo.id === id && !todo.completed) {
         // Just completed
-        playCompleteSound();
+        playStrike();
         triggerConfetti();
 
         // Update Streak & Points
