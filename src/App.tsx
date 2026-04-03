@@ -5,26 +5,19 @@ import {
   Trash2,
   CheckCircle2,
   Circle,
-  Trophy,
-  LayoutGrid,
   Flame,
+  Trophy,
   Volume2,
   VolumeX,
+  LogOut
 } from "lucide-react";
-import confetti from "canvas-confetti";
 import * as Tone from "tone";
+import confetti from "canvas-confetti";
 
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,7 +27,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { StreakBadge } from "@/components/StreakBadge";
+import { Auth, type UserProfile } from "@/components/Auth";
 
 // --- Types ---
 
@@ -48,49 +49,41 @@ interface Todo {
 // --- Constants ---
 
 const BADGES_CONFIG = [
-  { id: "beginner", name: "Beginner", description: "Complete 5 tasks", count: 5 },
-  { id: "pro", name: "Pro", description: "Complete 50 tasks", count: 50 },
-  { id: "streak_king", name: "Streak King", description: "Reach a 30-day streak", streak: 30 },
-  { id: "first_task", name: "First Step", description: "Complete your first task", count: 1 },
+  { id: "first-step", name: "First Step", description: "Complete your first task", count: 1, icon: <CheckCircle2 /> },
+  { id: "beginner", name: "Beginner", description: "Complete 5 tasks", count: 5, icon: <Trophy /> },
+  { id: "pro", name: "Pro", description: "Complete 50 tasks", count: 50, icon: <Flame /> },
+  { id: "streak-king", name: "Streak King", description: "Reach a 30-day streak", streak: 30, icon: <Flame /> },
 ];
 
-// --- App Component ---
-
 export default function App() {
-  const [todos, setTodos] = useState<Todo[]>(() => {
-    const saved = localStorage.getItem("todos");
-    return saved ? JSON.parse(saved) : [];
-  });
-
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [todos, setTodos] = useState<Todo[]>([]);
   const [inputValue, setInputValue] = useState("");
-  const [streak, setStreak] = useState(() => Number(localStorage.getItem("streak")) || 0);
-  const [points, setPoints] = useState(() => Number(localStorage.getItem("points")) || 0);
-  const [lastCompletedDate, setLastCompletedDate] = useState(() => localStorage.getItem("lastCompletedDate") || "");
-  const [unlockedBadges, setUnlockedBadges] = useState<string[]>(() => {
-    const saved = localStorage.getItem("badges");
-    return saved ? JSON.parse(saved) : [];
-  });
-
+  const [streak, setStreak] = useState(0);
+  const [points, setPoints] = useState(0);
+  const [unlockedBadges, setUnlockedBadges] = useState<string[]>([]);
   const [isMuted, setIsMuted] = useState(false);
-  const [showMilestone, setShowMilestone] = useState<{ title: string, desc: string } | null>(null);
+  const [showMilestone, setShowMilestone] = useState<{ title: string; desc: string } | null>(null);
 
   const synth = useRef<Tone.Synth | null>(null);
+  const strikePlayer = useRef<Tone.Player | null>(null);
 
-  // --- Effects ---
-
-  useEffect(() => {
-    localStorage.setItem("todos", JSON.stringify(todos));
-  }, [todos]);
+  // --- Persistence Logic ---
 
   useEffect(() => {
-    localStorage.setItem("streak", streak.toString());
-    localStorage.setItem("points", points.toString());
-    localStorage.setItem("lastCompletedDate", lastCompletedDate);
-    localStorage.setItem("badges", JSON.stringify(unlockedBadges));
-  }, [streak, points, lastCompletedDate, unlockedBadges]);
+    if (!user) return;
+    const savedTodos = localStorage.getItem(`todos_${user.id}`);
+    const savedStreak = localStorage.getItem(`streak_${user.id}`);
+    const savedPoints = localStorage.getItem(`points_${user.id}`);
+    const savedBadges = localStorage.getItem(`badges_${user.id}`);
+    const lastCompletedDate = localStorage.getItem(`lastCompletedDate_${user.id}`);
 
-  useEffect(() => {
-    // Check for streak reset on load
+    if (savedTodos) setTodos(JSON.parse(savedTodos));
+    if (savedStreak) setStreak(parseInt(savedStreak));
+    if (savedPoints) setPoints(parseInt(savedPoints));
+    if (savedBadges) setUnlockedBadges(JSON.parse(savedBadges));
+
+    // Streak Reset Logic
     const today = new Date().toDateString();
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -99,24 +92,44 @@ export default function App() {
     if (lastCompletedDate && lastCompletedDate !== today && lastCompletedDate !== yesterdayStr) {
       setStreak(0);
     }
-  }, [lastCompletedDate]);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    localStorage.setItem(`todos_${user.id}`, JSON.stringify(todos));
+  }, [todos, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    localStorage.setItem(`streak_${user.id}`, streak.toString());
+  }, [streak, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    localStorage.setItem(`points_${user.id}`, points.toString());
+  }, [points, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    localStorage.setItem(`badges_${user.id}`, JSON.stringify(unlockedBadges));
+  }, [unlockedBadges, user]);
 
   useEffect(() => {
     // Initialize Tone.js
     synth.current = new Tone.Synth().toDestination();
+    strikePlayer.current = new Tone.Player("/fahhhhh.mp3").toDestination();
     return () => {
       synth.current?.dispose();
+      strikePlayer.current?.dispose();
     };
   }, []);
 
   // --- Helpers ---
 
-  const strikePlayer = new Tone.Player("/fahhhhh.mp3").toDestination();
-
   const playStrike = () => {
-    if (isMuted) return;
+    if (isMuted || !strikePlayer.current) return;
     if (Tone.context.state !== "running") Tone.start();
-    strikePlayer.start();
+    strikePlayer.current.start();
   };
 
   const playFanfare = () => {
@@ -153,25 +166,6 @@ export default function App() {
     });
   };
 
-  const updateStreak = () => {
-    const today = new Date().toDateString();
-    if (lastCompletedDate === today) return;
-
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (lastCompletedDate === yesterday.toDateString()) {
-      setStreak(prev => prev + 1);
-    } else if (lastCompletedDate === "") {
-      setStreak(1);
-    } else {
-      // Check if missed days? For simplicity, if not yesterday, reset.
-      // But user said "reset if no complete", so we'll just set to 1 if first for today.
-      setStreak(prev => (lastCompletedDate === yesterday.toDateString() ? prev + 1 : 1));
-    }
-    setLastCompletedDate(today);
-  };
-
   // --- Handlers ---
 
   const addTodo = (e?: React.FormEvent) => {
@@ -197,9 +191,16 @@ export default function App() {
         triggerConfetti();
 
         // Update Streak & Points
-        updateStreak();
+        const today = new Date().toDateString();
         const multiplier = streak >= 7 ? 2 : 1;
         setPoints(p => p + (10 * multiplier));
+
+        if (user) {
+          localStorage.setItem(`lastCompletedDate_${user.id}`, today);
+          if (streak === 0 || localStorage.getItem(`lastCompletedDate_${user.id}`) !== today) {
+            setStreak(s => s + 1);
+          }
+        }
 
         // Check Milestones
         const completedCount = todos.filter(t => t.completed).length + 1;
@@ -220,36 +221,30 @@ export default function App() {
 
   // --- Multiplier Logic ---
   const multiplier = streak >= 7 ? 2 : 1;
-  const streakProgress = (streak % 7) / 7 * 100;
+
+  if (!user) {
+    return <Auth onLogin={setUser} />;
+  }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white p-4 md:p-8 font-sans selection:bg-orange-500/30">
-      {/* Background Decor */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-orange-600/10 blur-[120px] rounded-full" />
-        <div className="absolute top-[20%] -right-[10%] w-[30%] h-[30%] bg-orange-500/5 blur-[120px] rounded-full" />
+    <div className="min-h-screen bg-black text-white selection:bg-orange-500/30 selection:text-orange-500 font-sans p-4 md:p-8 relative overflow-hidden">
+      {/* Dynamic Background */}
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-20">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-orange-500/40 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/30 rounded-full blur-[150px]" />
       </div>
 
-      <div className="max-w-2xl mx-auto relative z-10 space-y-8">
-
-        {/* Header */}
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-black tracking-tighter italic flex items-center gap-2">
-              DO IT <span className="text-orange-500 underline decoration-4 underline-offset-4">NOW</span>
-              <Flame className="text-orange-500 animate-pulse" />
-            </h1>
-            <p className="text-muted-foreground text-sm font-medium">Power up your productivity.</p>
-          </div>
-
-          <div className="flex items-center gap-2">
+      <div className="max-w-2xl mx-auto space-y-8 relative z-10">
+        {/* Header Section */}
+        <header className="flex items-center justify-between p-4 bg-secondary/10 border border-border/50 rounded-3xl backdrop-blur-md sticky top-4 z-50">
+          <div className="flex items-center gap-4">
             <Button
-              variant="ghost"
+              variant="outline"
               size="icon"
               onClick={() => setIsMuted(!isMuted)}
-              className="text-muted-foreground hover:text-white"
+              className="border-none bg-transparent hover:bg-white/5"
             >
-              {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+              {isMuted ? <VolumeX className="text-muted-foreground" /> : <Volume2 className="text-orange-500" />}
             </Button>
 
             <Sheet>
@@ -267,51 +262,80 @@ export default function App() {
               <SheetContent className="bg-black border-l border-border/50 text-white overflow-y-auto">
                 <SheetHeader className="mb-6">
                   <SheetTitle className="text-white text-2xl font-bold italic">Hall of Fame</SheetTitle>
-                  <SheetDescription className="text-muted-foreground">
-                    Your achievements and milestones.
-                  </SheetDescription>
                 </SheetHeader>
-                <div className="grid grid-cols-1 gap-4">
-                  {BADGES_CONFIG.map((badge) => (
-                    <div
-                      key={badge.id}
-                      className={`p-4 rounded-xl border transition-all duration-300 ${unlockedBadges.includes(badge.id)
-                        ? "bg-secondary/50 border-orange-500/50 shadow-[0_0_15px_rgba(249,115,22,0.1)]"
-                        : "bg-secondary/10 border-border/30 opacity-40 grayscale"
-                        }`}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className={`p-2 rounded-lg ${unlockedBadges.includes(badge.id) ? "bg-orange-500/20 text-orange-500" : "bg-muted text-muted-foreground"}`}>
-                          <Trophy size={24} />
-                        </div>
-                        <div>
-                          <p className="font-bold">{badge.name}</p>
-                          <p className="text-xs text-muted-foreground">{badge.description}</p>
-                        </div>
-                        {unlockedBadges.includes(badge.id) && (
-                          <CheckCircle2 size={16} className="ml-auto text-orange-500" />
+
+                <div className="space-y-4">
+                  {BADGES_CONFIG.map((badge) => {
+                    const isUnlocked = unlockedBadges.includes(badge.id);
+                    return (
+                      <div
+                        key={badge.id}
+                        className={cn(
+                          "p-4 rounded-2xl border transition-all duration-500",
+                          isUnlocked
+                            ? "bg-orange-500/10 border-orange-500/30 scale-100"
+                            : "bg-secondary/5 border-border/20 grayscale opacity-40 scale-95"
                         )}
+                      >
+                        <div className="flex gap-4">
+                          <div className={cn(
+                            "p-3 rounded-xl",
+                            isUnlocked ? "bg-orange-500/20 text-orange-500" : "bg-black/40 text-muted-foreground"
+                          )}>
+                            {badge.icon}
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-lg">{badge.name}</h3>
+                            <p className="text-sm text-muted-foreground">{badge.description}</p>
+                            {isUnlocked && (
+                              <motion.div
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                className="mt-2 flex items-center gap-1 text-xs text-orange-400 font-bold uppercase tracking-wider"
+                              >
+                                <CheckCircle2 size={12} />
+                                Earned
+                              </motion.div>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </SheetContent>
             </Sheet>
+
+            {/* Logout Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setUser(null)}
+              className="gap-2 border-border/50 bg-secondary/20 h-8"
+            >
+              <LogOut size={14} />
+              <span className="hidden sm:inline">Exit</span>
+            </Button>
           </div>
+
+          <StreakBadge
+            streak={streak}
+            multiplier={multiplier}
+            progress={(streak % 7) / 7 * 100}
+          />
         </header>
 
         {/* Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <StreakBadge streak={streak} multiplier={multiplier} progress={streakProgress || 0} />
-
           <div className="p-4 bg-secondary/30 rounded-xl border border-border/50 backdrop-blur-sm flex flex-col justify-between">
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-widest font-bold">Total Points</p>
-              <h2 className="text-4xl font-black text-white italic">{points}</h2>
+              <p className="text-4xl font-black text-white italic">{points}</p>
             </div>
-            <div className="flex items-center gap-2 text-xs text-orange-400 font-medium bg-orange-500/10 w-fit px-2 py-1 rounded-full border border-orange-500/20">
-              <Plus size={12} />
-              {multiplier * 10} pts per task
+            <div className="flex items-center gap-2 mt-2">
+              <Badge variant="secondary" className="bg-orange-500/20 text-orange-400 border-orange-500/30">
+                Pro Tracking Active
+              </Badge>
             </div>
           </div>
         </div>
@@ -399,7 +423,7 @@ export default function App() {
           {todos.length === 0 && (
             <div className="py-20 text-center space-y-4">
               <div className="inline-flex p-4 rounded-full bg-secondary/20 border border-border/50">
-                <LayoutGrid size={40} className="text-muted-foreground/30" />
+                <Circle size={40} className="text-muted-foreground/30" />
               </div>
               <div>
                 <p className="text-xl font-bold opacity-30 tracking-tight italic">Nothing on horizontal.</p>
