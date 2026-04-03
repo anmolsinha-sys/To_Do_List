@@ -1,43 +1,37 @@
 import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
   Trash2,
   CheckCircle2,
-  Circle,
   Flame,
   Trophy,
-  Volume2,
-  VolumeX,
-  LogOut
+  LogOut,
+  Circle,
+  Zap,
+  Send,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import * as Tone from "tone";
 import confetti from "canvas-confetti";
-
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
+  SheetTrigger
 } from "@/components/ui/sheet";
-import { StreakBadge } from "@/components/StreakBadge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+} from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
 import { Auth, type UserProfile } from "@/components/Auth";
 
-// --- Types ---
+// --- Types & Constants ---
 
 interface Todo {
   id: string;
@@ -46,13 +40,11 @@ interface Todo {
   createdAt: number;
 }
 
-// --- Constants ---
-
 const BADGES_CONFIG = [
-  { id: "first-step", name: "First Step", description: "Complete your first task", count: 1, icon: <CheckCircle2 /> },
-  { id: "beginner", name: "Beginner", description: "Complete 5 tasks", count: 5, icon: <Trophy /> },
-  { id: "pro", name: "Pro", description: "Complete 50 tasks", count: 50, icon: <Flame /> },
-  { id: "streak-king", name: "Streak King", description: "Reach a 30-day streak", streak: 30, icon: <Flame /> },
+  { id: "first_step", name: "First Step", description: "Complete your first task", icon: Circle, unlock: (count: number) => count >= 1 },
+  { id: "beginner", name: "Beginner", description: "Complete 5 tasks", icon: Zap, unlock: (count: number) => count >= 5 },
+  { id: "pro", name: "Pro", description: "Complete 20 tasks", icon: Trophy, unlock: (count: number) => count >= 20 },
+  { id: "streak_king", name: "Streak King", description: "Maintain a 7-day streak", icon: Flame, unlock: (_: number, streak: number) => streak >= 7 },
 ];
 
 export default function App() {
@@ -62,7 +54,7 @@ export default function App() {
   const [streak, setStreak] = useState(0);
   const [points, setPoints] = useState(0);
   const [unlockedBadges, setUnlockedBadges] = useState<string[]>([]);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted] = useState(false);
   const [showMilestone, setShowMilestone] = useState<{ title: string; desc: string } | null>(null);
 
   const synth = useRef<Tone.Synth | null>(null);
@@ -149,14 +141,10 @@ export default function App() {
     });
   };
 
-  const checkBadges = (totalCompleted: number, currentStreak: number) => {
+  const checkBadges = (completedCount: number, currentStreak: number) => {
     BADGES_CONFIG.forEach(badge => {
       if (!unlockedBadges.includes(badge.id)) {
-        let unlock = false;
-        if (badge.count && totalCompleted >= badge.count) unlock = true;
-        if (badge.streak && currentStreak >= badge.streak) unlock = true;
-
-        if (unlock) {
+        if (badge.unlock(completedCount, currentStreak)) {
           setUnlockedBadges(prev => [...prev, badge.id]);
           setShowMilestone({ title: "Badge Unlocked!", desc: `You've earned the "${badge.name}" badge!` });
           playFanfare();
@@ -220,244 +208,279 @@ export default function App() {
   };
 
   // --- Multiplier Logic ---
-  const multiplier = streak >= 7 ? 2 : 1;
-
   if (!user) {
     return <Auth onLogin={setUser} />;
   }
 
   return (
-    <div className="min-h-screen bg-black text-white selection:bg-orange-500/30 selection:text-orange-500 font-sans p-4 md:p-8 relative overflow-hidden">
-      {/* Dynamic Background */}
-      <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-20">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-orange-500/40 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/30 rounded-full blur-[150px]" />
+    <div className="dark min-h-screen bg-black text-white selection:bg-orange-500/30 selection:text-orange-500 pb-20 relative overflow-x-hidden">
+      {/* Background Ambience */}
+      <div className="fixed top-0 left-0 w-full h-full pointer-events-none opacity-20">
+        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-orange-600 blur-[180px] rounded-full animate-pulse" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-pink-600 blur-[180px] rounded-full" />
       </div>
 
-      <div className="max-w-2xl mx-auto space-y-8 relative z-10">
-        {/* Header Section */}
-        <header className="flex items-center justify-between p-4 bg-secondary/10 border border-border/50 rounded-3xl backdrop-blur-md sticky top-4 z-50">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setIsMuted(!isMuted)}
-              className="border-none bg-transparent hover:bg-white/5"
-            >
-              {isMuted ? <VolumeX className="text-muted-foreground" /> : <Volume2 className="text-orange-500" />}
-            </Button>
+      {/* Premium Header */}
+      <header className="sticky top-0 z-50 px-4 sm:px-6 py-4 sm:py-6 border-b border-white/5 bg-black/60 backdrop-blur-3xl">
+        <div className="max-w-2xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="size-10 sm:size-12 rounded-xl sm:rounded-2xl baddest-gradient p-[1px] shadow-lg shadow-orange-500/20">
+              <div className="w-full h-full bg-black rounded-[9px] sm:rounded-[15px] flex items-center justify-center font-black italic text-lg sm:text-xl">
+                D
+              </div>
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black italic tracking-tighter leading-none">DO IT <span className="text-orange-500">NOW</span></h1>
+              <p className="text-[8px] sm:text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">Status: Operational</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-4">
+            {user && (
+              <div className="flex items-center gap-2 sm:gap-3 bg-zinc-900/50 p-1 sm:p-1.5 pl-3 sm:pl-4 rounded-xl sm:rounded-2xl border border-white/5">
+                <div className="text-right hidden min-[450px]:block">
+                  <p className="text-[8px] sm:text-[10px] font-black text-zinc-500 uppercase leading-none mb-1">Authenticated</p>
+                  <p className="text-[10px] sm:text-xs font-bold text-white truncate max-w-[60px] sm:max-w-[100px]">{user.email.split('@')[0]}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setUser(null)}
+                  className="size-7 sm:size-8 rounded-lg sm:rounded-xl hover:bg-red-500/10 hover:text-red-500 text-zinc-500 transition-all"
+                >
+                  <LogOut size={14} className="sm:size-4" />
+                </Button>
+              </div>
+            )}
 
             <Sheet>
-              <SheetTrigger
-                render={
-                  <Button variant="outline" size="sm" className="gap-2 border-border/50 bg-secondary/20">
-                    <Trophy size={16} className="text-yellow-500" />
-                    <span className="hidden sm:inline">Badges</span>
-                    <Badge variant="secondary" className="ml-1 px-1.5 py-0 h-5">
-                      {unlockedBadges.length}
-                    </Badge>
-                  </Button>
-                }
-              />
-              <SheetContent className="bg-black border-l border-border/50 text-white overflow-y-auto">
-                <SheetHeader className="mb-6">
-                  <SheetTitle className="text-white text-2xl font-bold italic">Hall of Fame</SheetTitle>
+              <SheetTrigger>
+                <Button variant="ghost" size="icon" className="size-10 sm:size-12 rounded-xl sm:rounded-2xl bg-zinc-900/50 border border-white/5 hover:bg-zinc-800 transition-all group">
+                  <Flame size={18} className="sm:size-5 group-hover:text-orange-500 transition-colors" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="bg-black/95 border-l border-white/10 backdrop-blur-2xl w-full sm:max-w-md p-6 sm:p-8">
+                <SheetHeader className="mb-8 sm:mb-10">
+                  <SheetTitle className="text-3xl sm:text-4xl font-black italic tracking-tighter text-white">ACHIEVEMENTS</SheetTitle>
                 </SheetHeader>
-
-                <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 overflow-y-auto max-h-[70vh] pr-2 custom-scrollbar">
                   {BADGES_CONFIG.map((badge) => {
                     const isUnlocked = unlockedBadges.includes(badge.id);
+                    const Icon = badge.icon;
                     return (
-                      <div
+                      <motion.div
                         key={badge.id}
+                        whileHover={{ scale: 1.02, translateY: -5 }}
                         className={cn(
-                          "p-4 rounded-2xl border transition-all duration-500",
+                          "p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border transition-all flex flex-col items-center text-center gap-3 sm:gap-4 relative overflow-hidden group",
                           isUnlocked
-                            ? "bg-orange-500/10 border-orange-500/30 scale-100"
-                            : "bg-secondary/5 border-border/20 grayscale opacity-40 scale-95"
+                            ? "bg-zinc-900/50 border-orange-500/30 shadow-[0_10px_30px_rgba(249,115,22,0.1)]"
+                            : "bg-zinc-950/30 border-white/5 opacity-40 grayscale"
                         )}
                       >
-                        <div className="flex gap-4">
-                          <div className={cn(
-                            "p-3 rounded-xl",
-                            isUnlocked ? "bg-orange-500/20 text-orange-500" : "bg-black/40 text-muted-foreground"
-                          )}>
-                            {badge.icon}
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-lg">{badge.name}</h3>
-                            <p className="text-sm text-muted-foreground">{badge.description}</p>
-                            {isUnlocked && (
-                              <motion.div
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                className="mt-2 flex items-center gap-1 text-xs text-orange-400 font-bold uppercase tracking-wider"
-                              >
-                                <CheckCircle2 size={12} />
-                                Earned
-                              </motion.div>
-                            )}
-                          </div>
+                        {isUnlocked && (
+                          <div className="absolute top-0 left-0 w-full h-1 baddest-gradient" />
+                        )}
+                        <div className={cn(
+                          "p-3 sm:p-4 rounded-xl sm:rounded-2xl",
+                          isUnlocked ? "bg-orange-500/10 text-orange-500" : "bg-zinc-800 text-zinc-600"
+                        )}>
+                          <Icon size={24} className="sm:size-8" />
                         </div>
-                      </div>
+                        <div>
+                          <h3 className="font-black italic text-xs sm:text-sm tracking-tight mb-1">{badge.name}</h3>
+                          <p className="text-[8px] sm:text-[10px] text-muted-foreground font-bold leading-tight">{badge.description}</p>
+                        </div>
+                        {!isUnlocked && (
+                          <div className="pt-1 sm:pt-2">
+                            <div className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-zinc-800 text-[6px] sm:text-[8px] font-black uppercase tracking-widest text-zinc-500">Locked</div>
+                          </div>
+                        )}
+                      </motion.div>
                     );
                   })}
                 </div>
               </SheetContent>
             </Sheet>
+          </div>
+        </div>
+      </header>
 
-            {/* Logout Button */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setUser(null)}
-              className="gap-2 border-border/50 bg-secondary/20 h-8"
-            >
-              <LogOut size={14} />
-              <span className="hidden sm:inline">Exit</span>
-            </Button>
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 mt-8 sm:mt-12 space-y-8 sm:space-y-12 relative z-10">
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          <div className="glass-card p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2.5rem] relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-2 sm:p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+              <Zap size={60} className="sm:size-20 text-orange-500" />
+            </div>
+            <p className="text-[8px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-[0.15em] sm:tracking-[0.2em] mb-2 sm:mb-4">Current Streak</p>
+            <div className="flex items-end gap-2 sm:gap-3">
+              <span className="text-4xl sm:text-6xl font-black italic leading-none drop-shadow-xl">{streak}</span>
+              <span className="text-orange-500 font-black italic mb-0.5 sm:mb-1 text-[10px] sm:text-sm">DAYS</span>
+            </div>
+            <div className="mt-4 sm:mt-6 flex items-center gap-2">
+              <div className="h-1 sm:h-1.5 flex-1 bg-zinc-900 rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full baddest-gradient"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min((streak / 7) * 100, 100)}%` }}
+                />
+              </div>
+              <span className="text-[8px] sm:text-[10px] font-black text-zinc-600">{streak}/7</span>
+            </div>
           </div>
 
-          <StreakBadge
-            streak={streak}
-            multiplier={multiplier}
-            progress={(streak % 7) / 7 * 100}
-          />
-        </header>
-
-        {/* Stats Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 bg-secondary/30 rounded-xl border border-border/50 backdrop-blur-sm flex flex-col justify-between">
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-widest font-bold">Total Points</p>
-              <p className="text-4xl font-black text-white italic">{points}</p>
+          <div className="glass-card p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2.5rem] relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-2 sm:p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+              <Trophy size={60} className="sm:size-20 text-pink-500" />
             </div>
-            <div className="flex items-center gap-2 mt-2">
-              <Badge variant="secondary" className="bg-orange-500/20 text-orange-400 border-orange-500/30">
-                Pro Tracking Active
+            <p className="text-[8px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-[0.15em] sm:tracking-[0.2em] mb-2 sm:mb-4">Total Points</p>
+            <div className="flex items-end gap-2 sm:gap-3">
+              <span className="text-4xl sm:text-6xl font-black italic leading-none drop-shadow-xl">{points}</span>
+              <span className="text-pink-500 font-black italic mb-0.5 sm:mb-1 text-[10px] sm:text-sm">XP</span>
+            </div>
+            <div className="mt-4 sm:mt-6">
+              <Badge className="bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border-white/5 rounded-full px-2 sm:px-3 py-0.5 sm:py-1 font-bold text-[8px] sm:text-[9px] uppercase tracking-wider">
+                Level: {Math.floor(points / 100) + 1} Elite
               </Badge>
             </div>
           </div>
         </div>
 
-        {/* Input Section */}
-        <form onSubmit={addTodo} className="flex gap-2 p-1.5 bg-secondary/20 rounded-2xl border border-border/50 backdrop-blur-md">
-          <Input
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Add a high-impact task..."
-            className="border-none bg-transparent focus-visible:ring-0 text-lg placeholder:text-muted-foreground/50 h-12"
-          />
-          <Button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white font-bold h-12 px-6 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-lg shadow-orange-500/20">
-            <Plus size={24} strokeWidth={3} />
-            <span className="hidden sm:inline ml-1 uppercase text-xs tracking-tighter">Enter</span>
-          </Button>
-        </form>
+        {/* Input System */}
+        <div className="relative group">
+          <div className="absolute -inset-1 baddest-gradient rounded-[1.5rem] sm:rounded-[2rem] blur opacity-20 group-focus-within:opacity-40 transition-opacity" />
+          <div className="relative flex items-center bg-zinc-950 border border-white/5 rounded-[1.5rem] sm:rounded-[2rem] p-1.5 sm:p-2 pr-3 sm:pr-4 shadow-2xl">
+            <div className="p-3 sm:p-4 text-zinc-700">
+              <Plus size={20} className="sm:size-6" />
+            </div>
+            <Input
+              placeholder="What's the next mission?"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addTodo()}
+              className="bg-transparent border-none text-base sm:text-xl font-bold placeholder:text-zinc-800 focus-visible:ring-0 h-12 sm:h-16 shadow-none"
+            />
+            <Button
+              onClick={addTodo}
+              className="size-10 sm:size-12 rounded-xl sm:rounded-2xl baddest-gradient hover:opacity-90 shadow-lg shadow-orange-500/20 active:scale-95 transition-all flex items-center justify-center p-0"
+            >
+              <Send size={16} className="sm:size-5 text-white" />
+            </Button>
+          </div>
+        </div>
 
-        {/* Todo List */}
-        <div className="space-y-3">
-          <AnimatePresence mode="popLayout">
+        {/* Task List */}
+        <div className="space-y-3 sm:space-y-4">
+          <AnimatePresence mode="popLayout" initial={false}>
             {todos.filter(t => !t.completed).map((todo) => (
               <motion.div
                 key={todo.id}
                 layout
-                initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
+                initial={{ opacity: 0, x: -20, scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
                 exit={{
                   opacity: 0,
+                  scale: 0.8,
                   x: 50,
-                  scale: 0.9,
-                  filter: "blur(10px)",
-                  transition: { duration: 0.3 }
+                  transition: { duration: 0.4, ease: "backIn" }
                 }}
-                className="group flex items-center gap-3 p-4 bg-secondary/10 hover:bg-secondary/20 border border-border/30 rounded-2xl transition-colors"
+                className="group relative overflow-hidden"
               >
-                <button
-                  onClick={() => toggleTodo(todo.id)}
-                  className="text-muted-foreground hover:text-orange-500 transition-colors shrink-0"
-                >
-                  <Circle size={28} strokeWidth={1.5} />
-                </button>
-                <span className="flex-1 font-medium text-lg tracking-tight">{todo.text}</span>
-                <button
-                  onClick={() => deleteTodo(todo.id)}
-                  className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-500 transition-all p-2"
-                >
-                  <Trash2 size={18} />
-                </button>
+                <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-transparent rounded-2xl sm:rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="flex items-center gap-3 sm:gap-4 p-4 sm:p-5 glass-card border-white/5 rounded-2xl sm:rounded-3xl hover:border-orange-500/20 transition-all">
+                  <motion.button
+                    whileTap={{ scale: 0.8 }}
+                    onClick={() => toggleTodo(todo.id)}
+                    className="size-8 sm:size-10 rounded-lg sm:rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-center group/btn hover:border-orange-500/50 transition-all shadow-inner"
+                  >
+                    <CheckCircle2 className="text-zinc-800 group-hover/btn:text-orange-500 transition-all pointer-events-none size-5 sm:size-6" />
+                  </motion.button>
+
+                  <span className="flex-1 text-base sm:text-lg font-bold text-zinc-100 tracking-tight">{todo.text}</span>
+
+                  <button
+                    onClick={() => deleteTodo(todo.id)}
+                    className="size-8 sm:size-10 rounded-lg sm:rounded-2xl hover:bg-red-500/10 text-zinc-800 hover:text-red-500 transition-all flex items-center justify-center"
+                  >
+                    <Trash2 size={16} className="sm:size-4.5" />
+                  </button>
+                </div>
               </motion.div>
             ))}
           </AnimatePresence>
 
-          {/* Completed Section Separator */}
-          {todos.some(t => t.completed) && (
-            <div className="pt-6 pb-2">
-              <h3 className="text-[10px] uppercase tracking-[0.3em] font-black text-muted-foreground/50 px-2 flex items-center gap-4">
-                Completed
-                <div className="h-px bg-border/20 flex-1" />
-              </h3>
+          {/* Completed History (Mini) */}
+          <div className="pt-8 sm:pt-10 mt-8 sm:mt-10 border-t border-white/5">
+            <h3 className="text-[8px] sm:text-[10px] font-black text-zinc-700 uppercase tracking-[0.2em] sm:tracking-[0.3em] mb-4 sm:mb-6 px-4">Completed History</h3>
+            <div className="space-y-2 sm:space-y-3 opacity-40">
+              <AnimatePresence mode="popLayout">
+                {todos.filter(t => t.completed).map((todo) => (
+                  <motion.div
+                    key={todo.id}
+                    layout
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 grayscale border border-dashed border-white/5 rounded-xl sm:rounded-2xl scale-95 origin-center"
+                  >
+                    <CheckCircle2 size={16} className="sm:size-5 text-orange-500" />
+                    <span className="flex-1 line-through text-xs sm:text-sm font-bold italic text-zinc-400">{todo.text}</span>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
-          )}
-
-          <AnimatePresence mode="popLayout">
-            {todos.filter(t => t.completed).map((todo) => (
-              <motion.div
-                key={todo.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 0.4 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                className="flex items-center gap-3 p-4 bg-transparent border border-dashed border-border/20 rounded-2xl grayscale"
-              >
-                <CheckCircle2 size={24} className="text-orange-500 shrink-0" />
-                <span className="flex-1 line-through text-muted-foreground italic font-medium">{todo.text}</span>
-                <button
-                  onClick={() => deleteTodo(todo.id)}
-                  className="text-muted-foreground hover:text-red-500 transition-colors p-2"
-                >
-                  <Trash2 size={18} />
-                </button>
-              </motion.div>
-            ))}
-          </AnimatePresence>
+          </div>
 
           {todos.length === 0 && (
-            <div className="py-20 text-center space-y-4">
-              <div className="inline-flex p-4 rounded-full bg-secondary/20 border border-border/50">
-                <Circle size={40} className="text-muted-foreground/30" />
-              </div>
-              <div>
-                <p className="text-xl font-bold opacity-30 tracking-tight italic">Nothing on horizontal.</p>
-                <p className="text-sm text-muted-foreground/40">Add something to break the silence.</p>
-              </div>
+            <div className="py-20 sm:py-32 text-center">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                className="inline-flex p-6 sm:p-10 rounded-full bg-zinc-950 border border-white/5 mb-6 sm:mb-8"
+              >
+                <div className="size-16 sm:size-20 rounded-full border-4 border-dashed border-zinc-900 flex items-center justify-center">
+                  <div className="size-10 sm:size-12 rounded-full baddest-gradient opacity-20 blur-xl animate-pulse" />
+                </div>
+              </motion.div>
+              <h3 className="text-2xl sm:text-3xl font-black italic tracking-tighter text-zinc-300">VOID SPACE</h3>
+              <p className="text-xs sm:text-sm font-bold text-zinc-600 mt-2 uppercase tracking-widest">No active missions detected.</p>
             </div>
           )}
         </div>
-      </div>
+      </main>
 
-      {/* Milestone Alert */}
+      {/* Full-Screen Milestone Alert */}
       <AlertDialog open={!!showMilestone} onOpenChange={() => setShowMilestone(null)}>
-        <AlertDialogContent className="bg-black/90 border-orange-500/50 backdrop-blur-xl">
-          <AlertDialogHeader className="items-center text-center space-y-4">
-            <div className="w-20 h-20 bg-orange-500/20 rounded-full flex items-center justify-center border border-orange-500/50">
-              <Trophy size={40} className="text-orange-500" />
-            </div>
-            <div className="space-y-2">
-              <AlertDialogTitle className="text-3xl font-black text-white tracking-tighter italic">
-                {showMilestone?.title}
-              </AlertDialogTitle>
-              <AlertDialogDescription className="text-muted-foreground text-lg">
-                {showMilestone?.desc}
-              </AlertDialogDescription>
-            </div>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="sm:justify-center">
-            <AlertDialogAction
-              onClick={() => setShowMilestone(null)}
-              className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-12 h-12 rounded-xl"
+        <AlertDialogContent className="bg-black/95 border-none backdrop-blur-3xl p-0 overflow-hidden rounded-[2rem] sm:rounded-[3rem] shadow-[0_0_100px_rgba(249,115,22,0.2)] max-w-[90vw] sm:max-w-md">
+          <div className="relative p-8 sm:p-12 text-center">
+            <div className="absolute top-0 left-0 w-full h-[2px] baddest-gradient" />
+
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="w-24 h-24 sm:w-32 sm:h-32 baddest-gradient rounded-full mx-auto flex items-center justify-center mb-6 sm:mb-8 shadow-[0_0_50px_rgba(249,115,22,0.4)]"
             >
-              LFG!
-            </AlertDialogAction>
-          </AlertDialogFooter>
+              <Trophy size={40} className="sm:size-15 text-white" />
+            </motion.div>
+
+            <div className="space-y-3 sm:space-y-4">
+              <h2 className="text-3xl sm:text-5xl font-black italic tracking-tighter text-white uppercase leading-none">
+                {showMilestone?.title}
+              </h2>
+              <p className="text-base sm:text-xl font-bold text-zinc-400">
+                {showMilestone?.desc}
+              </p>
+            </div>
+
+            <div className="mt-8 sm:mt-12">
+              <AlertDialogAction
+                onClick={() => setShowMilestone(null)}
+                className="w-full baddest-gradient hover:opacity-90 text-white font-black italic h-12 sm:size-16 rounded-xl sm:rounded-2xl text-lg sm:text-xl shadow-[0_15px_40px_rgba(249,115,22,0.3)] transition-all active:scale-95"
+              >
+                LET'S GO ➔
+              </AlertDialogAction>
+            </div>
+          </div>
         </AlertDialogContent>
       </AlertDialog>
     </div>

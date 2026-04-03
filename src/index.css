@@ -45,6 +45,13 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  --color-orange-glow: #ff5f00;
+  --color-pink-glow: #ff007f;
+
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.8);
+  --shadow-neon: 0 0 30px rgba(249, 115, 22, 0.2);
+  --text-shadow-neon: 0 0 15px rgba(249, 115, 22, 0.5);
 }
 
 :root {
@@ -122,10 +129,28 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-black text-foreground antialiased selection:bg-orange-500/30 selection:text-orange-500;
   }
 
   html {
     @apply font-sans;
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    @apply bg-zinc-950/40 border border-white/5 backdrop-blur-2xl shadow-glass;
+  }
+
+  .neon-glow {
+    @apply shadow-neon;
+  }
+
+  .neon-text {
+    @apply text-orange-500 [text-shadow:var(--text-shadow-neon)];
+  }
+
+  .baddest-gradient {
+    @apply bg-gradient-to-br from-orange-600 via-orange-500 to-pink-600;
   }
 }
